@@ -1,0 +1,74 @@
+import socket
+import matplotlib.pyplot as plt
+import numpy as np
+import time 
+saida_values = []
+count = 0
+
+def client_program():
+    global count
+    host = "3.211.150.168"
+    port = 5001
+
+    client_socket = socket.socket()
+    client_socket.connect((host, port))
+
+    EntradaSetpoint = float(input("Entre com o setpoint -> "))
+    EntradaKp = float(input("Entre com o kp -> "))
+    EntradaKi = float(input("Entre com o ki -> "))
+    EntradaKd = float(input("Entre com o kd -> "))
+    Sensorplanta1 = float(input("Entre com o valor atual da planta -->"))
+    message = Controlador(EntradaSetpoint, EntradaKp, EntradaKi, EntradaKd, Sensorplanta1)
+
+    while message != 0:
+        client_socket.send(bytes(str(message), 'utf-8'))
+        data = client_socket.recv(1024).decode()
+
+        if data.lower() == 'nan':
+            print("Received 'nan'. Exiting loop.")
+            break
+        if data.lower() == 'inf':
+            print("Received 'nan'. Exiting loop.")
+            break
+
+        Sensorplanta1 = float(data)
+        print('Received from server: ' + data)
+        # time.sleep(2)
+        message = Controlador(EntradaSetpoint, EntradaKp, EntradaKi, EntradaKd, Sensorplanta1)
+        saida_values.append(Sensorplanta1)
+        count += 1
+
+        if count >= 100:
+            EntradaSetpoint= float(input("Entre com o setpoint -> "))
+            count = 0
+            
+           
+            
+
+    client_socket.close()
+    plot_output()
+
+Erros = 0
+Erroant = 0
+
+def Controlador(setpoint, kp, ki, kd, planta):
+    global Erros, Erroant
+
+    Erro = setpoint - planta
+    Erros += Erro
+    Erroant = Erro - Erroant
+    Acaodecontrole = (kp * Erro) + (ki * Erros) + (kd * Erroant) 
+
+    return Acaodecontrole
+
+def plot_output():
+    t = np.arange(len(saida_values))
+    plt.plot(t, saida_values)
+    plt.title('Saída em relação ao tempo')
+    plt.xlabel('Amostras')
+    plt.ylabel('VP')
+    plt.grid(True)
+    plt.show()
+
+if __name__ == '__main__':
+    client_program()
