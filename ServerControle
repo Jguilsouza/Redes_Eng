@@ -1,0 +1,118 @@
+import socket
+import matplotlib.pyplot as plt
+import numpy as np
+import dash
+from dash import dcc, html
+from dash.dependencies import Input, Output
+import plotly.graph_objs as go
+import random
+import datetime
+import time
+import threading
+from collections import deque 
+global values
+global Controle
+global timestamps
+timestamps = deque(maxlen=100)
+values = deque(maxlen=100)
+Controle = deque(maxlen=100)
+app = dash.Dash(__name__)
+
+
+SaidaAnt = 0
+
+def server_program():
+    host = "172.31.87.181"
+    port = 5001
+    server_socket = socket.socket()
+    server_socket.bind((host, port))
+    global SaidaAnt
+    global data
+
+    server_socket.listen(2)
+    conn, address = server_socket.accept()
+    print("Connection from: " + str(address))
+    while True:
+        data = conn.recv(1024).decode()
+        if not data:
+            break
+        print("from connected user: " + data)
+        Retornosensor = plantadeNivel(float(data))
+        conn.send(bytes(str(Retornosensor), 'utf-8'))
+
+    conn.close()
+   
+# Rodar o servidor Dash em uma thread separada
+def run_dash_server():
+    from waitress import serve
+    app.run(port=8888)
+
+
+
+def plantadeNivel(AcaodeControle):
+    global SaidaAnt
+    Saida = (0.9048* SaidaAnt) + 0.0956 * AcaodeControle
+    SaidaAnt = Saida
+    return Saida
+
+
+app.layout = html.Div([
+    dcc.Graph(id='live-update-graph'),
+    dcc.Interval(
+        id='interval-component',
+        interval=1*1000,  
+        n_intervals=0
+    )
+])
+
+
+@app.callback(
+    Output('live-update-graph', 'figure'),
+    [Input('interval-component', 'n_intervals')]
+)
+def update_graph(n):
+    global values
+    global SaidaAnt
+    global timestamps
+    global Controle
+    global data
+    Controle.append(float(data))
+    timestamps.append(datetime.datetime.now().strftime("%H:%M:%S"))
+    values.append(SaidaAnt)
+
+    fig = go.Figure()
+
+    trace1=(go.Scatter(
+        x=list(timestamps),
+        y=list(values),
+        mode='lines+markers',
+        name='VP'
+    ))
+    trace2=(go.Scatter(
+        x=list(timestamps),
+        y=list(Controle),
+        mode='lines+markers',
+        name='Acao de Controle'
+    ))
+
+    layout = go.Layout(
+        title='Live Update Graph',
+        xaxis=dict(title='Timestamp'),
+        yaxis=dict(title='Value'),
+        showlegend=True
+    )
+
+    return {'data': [trace1,trace2], 'layout': layout}
+
+
+if __name__ == '__main__':
+    # Iniciar uma thread para o servidor Dash
+    a=threading.Thread(target=run_dash_server)
+    b=threading.Thread(target=server_program)
+    a.start()
+    b.start()
+    # server_program()
+    # from waitress import serve
+    # app.run(port=8888)
+    
+    
